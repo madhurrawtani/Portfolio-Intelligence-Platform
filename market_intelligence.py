@@ -504,10 +504,21 @@ class MarketIntelligenceManager:
         # Compile stock-by-stock output details
         stock_details = {}
         for ticker in tickers:
+            t_res = tech_analyses[ticker]
+            l_res = liq_analyses[ticker]
+            d_res = derivs_analyses[ticker]
+            
+            # Weighted average score for individual stock
+            tech_overall = int(t_res["trend_score"]*0.4 + t_res["momentum_score"]*0.4 + t_res["volatility_score"]*0.2)
+            liq_overall = l_res["liquidity_score"]
+            deriv_overall = d_res["score"]
+            stock_intel_score = int(round(tech_overall * 0.4 + deriv_overall * 0.3 + liq_overall * 0.3))
+            
             stock_details[ticker] = {
-                "technical": tech_analyses[ticker],
-                "liquidity": liq_analyses[ticker],
-                "derivatives": derivs_analyses[ticker]
+                "technical": t_res,
+                "liquidity": l_res,
+                "derivatives": d_res,
+                "overall_score": stock_intel_score
             }
 
         return {

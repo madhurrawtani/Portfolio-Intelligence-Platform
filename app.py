@@ -651,19 +651,85 @@ if "last_analysis_results" in st.session_state:
             )
     
     # Key Summary Cards
-    col_card1, col_card2, col_card3, col_card4 = st.columns(4)
-    
-    # Check if we have new columns, fallback to total_value for backward compatibility with old saves
+    # Calculate financial metrics
     total_invested_cost = df_grouped["invested_value"].sum() if "invested_value" in df_grouped.columns else df_grouped["total_value"].sum()
     total_current_value = df_grouped["current_value"].sum() if "current_value" in df_grouped.columns else df_grouped["total_value"].sum()
     
     total_unrealized_pnl = total_current_value - total_invested_cost
     total_pnl_pct = (total_unrealized_pnl / total_invested_cost * 100) if total_invested_cost > 0 else 0.0
     
-    # Determine P&L color for styling
     pnl_color = "#10B981" if total_unrealized_pnl >= 0 else "#EF4444"
     pnl_symbol = "+" if total_unrealized_pnl >= 0 else ""
     
+    # Executive Summary Card Section
+    st.markdown("### 📊 Executive Summary")
+    
+    col_exec1, col_exec2, col_exec3 = st.columns(3)
+    
+    health_data = json_data.get("portfolio_health", {})
+    health_score = health_data.get("health_score", 0)
+    risk_level = health_data.get("risk_level", "Unknown")
+    market_intel_score = json_data.get("market_intelligence", {}).get("overall_score", 50)
+    research_reports = json_data.get("research_reports", [])
+    
+    buy_count = sum(1 for r in research_reports if "buy" in r.get("recommendation", "").lower() or "accumulate" in r.get("recommendation", "").lower())
+    hold_count = sum(1 for r in research_reports if "hold" in r.get("recommendation", "").lower() or "neutral" in r.get("recommendation", "").lower())
+    sell_count = sum(1 for r in research_reports if "sell" in r.get("recommendation", "").lower() or "reduce" in r.get("recommendation", "").lower())
+    
+    if buy_count > hold_count and buy_count > sell_count:
+        consensus_label = "🟢 Bullish (Buy)"
+    elif sell_count > buy_count and sell_count > hold_count:
+        consensus_label = "🔴 Bearish (Sell)"
+    else:
+        consensus_label = "🟡 Neutral (Hold)"
+        
+    with col_exec1:
+        st.markdown(f"""
+        <div class='card' style='border-left: 4px solid #6C5CE7;'>
+            <div class='metric-label'>Overall Portfolio Score</div>
+            <div class='metric-value' style='color: #a29bfe;'>{health_score}/100</div>
+            <div class='metric-sub'>Risk Profile: <b>{risk_level}</b></div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_exec2:
+        st.markdown(f"""
+        <div class='card' style='border-left: 4px solid #3B82F6;'>
+            <div class='metric-label'>Market Intelligence Score</div>
+            <div class='metric-value' style='color: #60A5FA;'>{market_intel_score}/100</div>
+            <div class='metric-sub'>Quantitative Outlook</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_exec3:
+        st.markdown(f"""
+        <div class='card' style='border-left: 4px solid #10B981;'>
+            <div class='metric-label'>Research Consensus</div>
+            <div class='metric-value' style='color: #34D399;'>{consensus_label}</div>
+            <div class='metric-sub'>Analyst Ratings ({buy_count} Buy / {hold_count} Hold / {sell_count} Sell)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.markdown("##### 🔍 Key Insights & Suggested Actions")
+    col_ins1, col_ins2, col_ins3 = st.columns(3)
+    
+    intel_summary = json_data.get("portfolio_intelligence_summary", {})
+    opps = intel_summary.get("top_opportunities", [])
+    risks = intel_summary.get("key_risks", [])
+    rebal_actions = intel_summary.get("rebalancing_actions_summary", [])
+    
+    with col_ins1:
+        opp_val = opps[0] if opps else "No clear buying opportunity identified."
+        st.info(f"**Top Opportunity:**\n{opp_val}")
+    with col_ins2:
+        risk_val = risks[0] if risks else "No major concentration or exposure risks detected."
+        st.warning(f"**Largest Risk:**\n{risk_val}")
+    with col_ins3:
+        act_val = rebal_actions[0] if rebal_actions else "Maintain current allocations."
+        st.success(f"**Suggested Action:**\n{act_val}")
+        
+    st.markdown("---")
+    st.markdown("### 📈 Financial Metrics & Performance")
+    
+    col_card1, col_card2, col_card3, col_card4 = st.columns(4)
     with col_card1:
         st.markdown(f"""
         <div class='card'>
@@ -697,12 +763,14 @@ if "last_analysis_results" in st.session_state:
         """, unsafe_allow_html=True)
         
     # Tab Layout for Consolidated vs Detailed view
-    tab_cons, tab_advisory, tab_visuals, tab_market_intel, tab_report, tab_det, tab_raw = st.tabs([
-        "Consolidated Portfolio", 
-        "Advisory & Rebalancing", 
-        "Portfolio Visualizations",
+    tab_cons, tab_research, tab_market_intel, tab_rebal, tab_health, tab_visuals, tab_report, tab_det, tab_raw = st.tabs([
+        "Portfolio Holdings", 
+        "Research Consensus", 
         "Market Intelligence",
-        "Report Center", 
+        "Portfolio Optimization", 
+        "Portfolio Health",
+        "Portfolio Visualizations",
+        "Report Center",
         "Individual Extractions", 
         "Exported JSON"
     ])
@@ -761,43 +829,171 @@ if "last_analysis_results" in st.session_state:
             hide_index=True
         )
         
-    with tab_advisory:
-        st.markdown("#### Portfolio Rebalancing & Allocation Recommendations")
-        st.markdown("Recommended target asset allocations and action steps matching the selected risk profile.")
+    with tab_research:
+        st.markdown("#### Research Consensus")
+        st.markdown("Consolidated analyst opinions, factor breakdowns, and overall confidence scores.")
         
-        # Intelligence Summary display
-        intel_summary = json_data.get("portfolio_intelligence_summary", {})
-        if intel_summary:
-            st.markdown("##### 💡 Advisory Intelligence Summary")
+        research_rows = []
+        positions_list = json_data.get("consolidated_positions", [])
+        research_reports = json_data.get("research_reports", [])
+        market_intel = json_data.get("market_intelligence", {})
+        health_details = json_data.get("portfolio_health", {})
+        
+        total_val = sum(pos.get("current_value", pos.get("quantity", 0.0) * pos.get("average_price", 0.0)) for pos in positions_list)
+        if total_val == 0:
+            total_val = 1.0
             
-            # Opportunities
-            opps = intel_summary.get("top_opportunities", [])
-            if opps:
-                st.markdown("**Top Opportunities:**")
-                for o in opps:
-                    st.markdown(f"- {o}")
-                    
-            # Risks
-            risks = intel_summary.get("key_risks", [])
-            if risks:
-                st.markdown("**Key Risks Identified:**")
-                for r in risks:
-                    st.markdown(f"- {r}")
-                    
-            # Rebalancing Actions Summary
-            rebal_actions = intel_summary.get("rebalancing_actions_summary", [])
-            if rebal_actions:
-                st.markdown("**Rebalancing Actions Summary:**")
-                for a in rebal_actions:
-                    st.markdown(f"- {a}")
-            st.markdown("---")
+        reports_map = {r["stock"]: r for r in research_reports}
+        
+        for pos in positions_list:
+            ticker = pos.get("normalized_ticker", "")
+            qty = pos.get("quantity", 0.0)
+            price = pos.get("current_price", pos.get("average_price", 0.0))
+            curr_val = pos.get("current_value", qty * price)
+            weight = (curr_val / total_val) * 100.0
             
-        # Rebalancing Recommendations Table
+            report = reports_map.get(ticker, {})
+            rec = report.get("recommendation", "No Coverage")
+            conf = report.get("confidence_score")
+            conf_str = f"{conf:.0f}%" if conf is not None else "N/A"
+            
+            # Map source
+            source = report.get("research_source", "No Coverage")
+            rec_type = report.get("recommendation_type", "Web Research")
+            if rec == "Research Not Available" or source == "System Error":
+                display_source = "No Coverage"
+                rec = "No Coverage"
+            elif "Nirmal Bang" in source and "Motilal Oswal" in source:
+                display_source = "Nirmal Bang + Motilal Oswal"
+            elif "Nirmal Bang" in source:
+                display_source = "Nirmal Bang"
+            elif "Motilal Oswal" in source:
+                display_source = "Motilal Oswal"
+            elif "Web Research" in rec_type or "Web" in source:
+                display_source = "Web Consensus"
+            else:
+                display_source = "Web Consensus"
+                
+            # Market Intelligence Overall Score (individual stock overall score)
+            stock_details = market_intel.get("stock_details", {}).get(ticker, {})
+            mi_score = stock_details.get("overall_score", 50)
+            
+            # Health Contribution
+            is_concentrated = False
+            for weak in health_details.get("weaknesses", []):
+                if ticker in weak and "concentration" in weak.lower():
+                    is_concentrated = True
+                    break
+            
+            if rec == "Sell" or rec == "Reduce":
+                health_contrib = "🔴 Negative"
+            elif is_concentrated:
+                health_contrib = "🔴 Negative (Overweight)"
+            elif rec == "Buy" or rec == "Accumulate":
+                health_contrib = "🟢 Positive"
+            else:
+                health_contrib = "🟡 Neutral"
+                
+            factors = report.get("factors_breakdown", {})
+            
+            def map_sentiment(val):
+                val_str = str(val).lower()
+                if "positive" in val_str: return "🟢 Positive"
+                if "neutral" in val_str: return "🟡 Neutral"
+                if "negative" in val_str: return "🔴 Negative"
+                return "🟡 Neutral"
+                
+            def map_risk(val):
+                val_str = str(val).lower()
+                if "low" in val_str: return "🟢 Low"
+                if "moderate" in val_str: return "🟡 Moderate"
+                if "high" in val_str: return "🔴 High"
+                return "🟡 Moderate"
+                
+            def map_valuation(val):
+                val_str = str(val).lower()
+                if "low" in val_str: return "🟢 Low"
+                if "moderate" in val_str: return "🟡 Moderate"
+                if "high" in val_str: return "🔴 High"
+                return "🟡 Moderate"
+                
+            analyst_sent = map_sentiment(factors.get("analyst_sentiment", "neutral"))
+            upside = map_sentiment(factors.get("target_upside", "neutral"))
+            revenue = map_sentiment(factors.get("revenue_growth", "neutral"))
+            profitability = map_sentiment(factors.get("profitability_outlook", "neutral"))
+            balance_sheet = map_sentiment(factors.get("balance_sheet_strength", "neutral"))
+            sector_out = map_sentiment(factors.get("sector_outlook", "neutral"))
+            risk = map_risk(factors.get("risk_factors", "moderate"))
+            valuation = map_valuation(factors.get("valuation_concerns", "moderate"))
+            
+            # Concise summary (instead of repeating factor text)
+            if rec == "No Coverage":
+                summary = "No analyst coverage or research available."
+            else:
+                summary_parts = []
+                if "positive" in factors.get("balance_sheet_strength", "").lower():
+                    bs_part = "Strong balance sheet"
+                else:
+                    bs_part = "Stable balance sheet"
+                if "positive" in factors.get("profitability_outlook", "").lower():
+                    prof_part = "positive profitability"
+                else:
+                    prof_part = "flat profitability"
+                summary_parts.append(f"{bs_part} with {prof_part}.")
+                
+                val_str = factors.get("valuation_concerns", "moderate").lower()
+                summary_parts.append(f"{val_str.capitalize()} valuation concern.")
+                
+                risk_str = factors.get("risk_factors", "moderate").lower()
+                summary_parts.append(f"{risk_str.capitalize()} risk profile.")
+                summary = " ".join(summary_parts)
+                
+            research_rows.append({
+                "Stock": ticker,
+                "Current Value": curr_val,
+                "Portfolio Weight": f"{weight:.1f}%",
+                "Research Source": display_source,
+                "Recommendation": rec,
+                "Overall Confidence": conf_str,
+                "Market Intelligence Score": f"{mi_score}/100",
+                "Portfolio Health Contribution": health_contrib,
+                "Analyst Sentiment": analyst_sent,
+                "Target Upside": upside,
+                "Revenue": revenue,
+                "Profitability": profitability,
+                "Balance Sheet": balance_sheet,
+                "Sector": report.get("sector", "Other"),
+                "Risk": risk,
+                "Valuation": valuation,
+                "Summary": summary
+            })
+            
+        df_research_grid = pd.DataFrame(research_rows)
+        # Select columns in requested exact layout
+        cols_to_show_research = [
+            "Stock", "Current Value", "Portfolio Weight", "Research Source", "Recommendation",
+            "Overall Confidence", "Market Intelligence Score", "Portfolio Health Contribution",
+            "Analyst Sentiment", "Target Upside", "Revenue", "Profitability", "Balance Sheet",
+            "Sector", "Risk", "Valuation", "Summary"
+        ]
+        cols_to_show_research = [col for col in cols_to_show_research if col in df_research_grid.columns]
+        df_research_grid = df_research_grid[cols_to_show_research]
+        
+        st.dataframe(
+            df_research_grid.style.format({
+                "Current Value": format_inr
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+    with tab_rebal:
+        st.markdown("#### Portfolio Optimization & Rebalancing")
+        st.markdown("Target allocations and action steps dynamically calculated to optimize diversification and concentration profiles.")
+        
         rebal_list = json_data.get("rebalancing_recommendations", [])
         if rebal_list:
             df_rebal = pd.DataFrame(rebal_list)
-            
-            # Rename columns for presentation
             df_rebal_display = df_rebal.rename(columns={
                 "ticker": "Ticker",
                 "current_allocation_pct": "Current Alloc %",
@@ -809,7 +1005,6 @@ if "last_analysis_results" in st.session_state:
                 "sector": "Sector"
             })
             
-            # Column selection
             cols_to_show_rebal = [
                 "Ticker", "Current Alloc %", "Target Alloc %", "Alloc Change %", 
                 "Advisory Action", "Consensus Rating", "Confidence", "Sector"
@@ -817,7 +1012,6 @@ if "last_analysis_results" in st.session_state:
             cols_to_show_rebal = [col for col in cols_to_show_rebal if col in df_rebal_display.columns]
             df_rebal_display = df_rebal_display[cols_to_show_rebal]
             
-            # Format and render dataframe
             st.dataframe(
                 df_rebal_display.style.format({
                     "Current Alloc %": "{:,.1f}%",
@@ -830,6 +1024,30 @@ if "last_analysis_results" in st.session_state:
             )
         else:
             st.info("No rebalancing recommendations available.")
+            
+    with tab_health:
+        st.markdown("#### Portfolio Health & Sizing Diagnostics")
+        st.markdown("Diversification analysis, stock and sector concentration limits, and rating quality metrics.")
+        
+        health_data = json_data.get("portfolio_health", {})
+        if health_data:
+            col_h1, col_h2 = st.columns(2)
+            with col_h1:
+                st.markdown("**Core Strengths:**")
+                for strength in health_data.get("strengths", []):
+                    st.markdown(f"- {strength}")
+                    
+                st.markdown("**Areas for Improvement:**")
+                for weakness in health_data.get("weaknesses", []):
+                    st.markdown(f"- {weakness}")
+            with col_h2:
+                flags = health_data.get("risk_flags", [])
+                if flags:
+                    st.markdown("**Risk Exposure Flags:**")
+                    for flag in flags:
+                        st.markdown(f"⚠️ {flag}")
+                else:
+                    st.success("No active concentration or sizing exposure alerts.")
             
     with tab_visuals:
         st.markdown("#### Portfolio Analytics & Visualizations")
@@ -1115,145 +1333,7 @@ if "last_analysis_results" in st.session_state:
         # Pretty print JSON
         st.code(json.dumps(json_data, indent=2), language="json")
         
-        # Download button
-        st.download_button(
-            label="Download JSON Portfolio Data",
-            data=json.dumps(json_data, indent=2),
-            file_name=os.path.basename(json_path),
-            mime="application/json"
-        )
-        
-    # Load portfolio health from session state JSON (Phase 4)
-    portfolio_health = json_data.get("portfolio_health", {})
-    if portfolio_health:
-        st.markdown("---")
-        st.markdown("### 🩺 Portfolio Health Summary")
-        
-        # Display health metrics in 3 columns
-        col_h1, col_h2, col_h3 = st.columns(3)
-        health_score = portfolio_health.get("health_score", 0)
-        risk_level = portfolio_health.get("risk_level", "Unknown")
-        metrics = portfolio_health.get("metrics", {})
-        unique_sectors_count = metrics.get("unique_sectors_count", 0) if metrics else 0
-        
-        # Color coding for risk level
-        risk_color = "#10B981" if risk_level == "Low" else "#F59E0B" if risk_level == "Moderate" else "#EF4444"
-        
-        with col_h1:
-            st.markdown(f"""
-            <div class='card' style='border-left: 4px solid #6C5CE7;'>
-                <div class='metric-label'>Portfolio Health Score</div>
-                <div class='metric-value' style='color: #a29bfe;'>{health_score}/100</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with col_h2:
-            st.markdown(f"""
-            <div class='card' style='border-left: 4px solid {risk_color};'>
-                <div class='metric-label'>Portfolio Risk Level</div>
-                <div class='metric-value' style='color: {risk_color};'>{risk_level}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with col_h3:
-            st.markdown(f"""
-            <div class='card' style='border-left: 4px solid #3B82F6;'>
-                <div class='metric-label'>Sectors Diversification</div>
-                <div class='metric-value' style='color: #60A5FA;'>{unique_sectors_count} Active Sector(s)</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        # Display strengths and weaknesses
-        col_str, col_weak = st.columns(2)
-        with col_str:
-            st.markdown("#### Strengths")
-            strengths_list = portfolio_health.get("strengths", [])
-            for s in strengths_list:
-                st.markdown(f"<span style='color: #10B981;'>{s}</span>", unsafe_allow_html=True)
-                
-        with col_weak:
-            st.markdown("#### Weaknesses & Risks")
-            weaknesses_list = portfolio_health.get("weaknesses", [])
-            for w in weaknesses_list:
-                st.markdown(f"<span style='color: #F59E0B;'>{w}</span>", unsafe_allow_html=True)
-                
-        # Risk Flags Alert Box
-        risk_flags = portfolio_health.get("risk_flags", [])
-        if risk_flags:
-            st.markdown("<br>", unsafe_allow_html=True)
-            for flag in risk_flags:
-                st.error(flag)
 
-    # Display a research table below the portfolio extraction table (Phase 2)
-    st.markdown("---")
-    st.markdown("### 🔍 Broker Research Integration")
-    
-    # Load research from session state
-    research_reports_list = json_data.get("research_reports", [])
-    if research_reports_list:
-        df_research = pd.DataFrame(research_reports_list)
-        
-        # Join list of key reasons into a string for pretty display
-        if "key_reasons" in df_research.columns:
-            df_research["key_reasons"] = df_research["key_reasons"].apply(
-                lambda x: "; ".join(x) if isinstance(x, list) else str(x) if pd.notnull(x) else ""
-            )
-
-        # Apply factor formatting helper
-        if "factors_breakdown" in df_research.columns:
-            df_research["Factor Breakdown"] = df_research["factors_breakdown"].apply(format_factors_breakdown)
-        else:
-            df_research["Factor Breakdown"] = "N/A"
-            
-        # Format Score column
-        if "raw_score" in df_research.columns and "max_score" in df_research.columns:
-            df_research["Score"] = df_research.apply(
-                lambda r: f"{int(r['raw_score'])}/{int(r['max_score'])}" if pd.notnull(r['raw_score']) and pd.notnull(r['max_score']) else "N/A",
-                axis=1
-            )
-        else:
-            df_research["Score"] = "N/A"
-            
-        # Format Confidence Percentage
-        if "confidence_score" in df_research.columns:
-            df_research["Confidence"] = df_research["confidence_score"].apply(
-                lambda x: f"{x:.1f}%" if pd.notnull(x) and isinstance(x, (int, float)) else "N/A"
-            )
-        else:
-            df_research["Confidence"] = "N/A"
-
-        # Rename columns to match requirements
-        df_research_display = df_research.rename(columns={
-            "stock": "Stock",
-            "research_available": "Research Available",
-            "recommendation_type": "Recommendation Source",
-            "recommendation": "Recommendation",
-            "target_price": "Target Price (₹)",
-            "research_source": "Source(s) Used",
-            "research_date": "Report Date",
-            "key_reasons": "Key Reasons",
-            "key_takeaway": "Key Takeaway",
-            "ai_provider_used": "AI Provider Used"
-        })
-        
-        # Select required columns (Removed AI Provider for client view)
-        columns_to_show_res = [
-            "Stock", "Research Available", "Recommendation Source", "Recommendation", 
-            "Confidence", "Score", "Source(s) Used", "Factor Breakdown", "Key Reasons", 
-            "Key Takeaway", "Report Date"
-        ]
-        columns_to_show_res = [col for col in columns_to_show_res if col in df_research_display.columns]
-        df_research_display = df_research_display[columns_to_show_res]
-        
-        st.dataframe(
-            df_research_display.style.format({
-                "Target Price (₹)": format_inr
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No research coverage details available for the stocks in this session.")
 
 # Display previously saved runs
 st.markdown("---")

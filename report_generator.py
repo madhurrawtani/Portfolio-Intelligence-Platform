@@ -511,7 +511,7 @@ def generate_pdf_report(json_data: dict, output_pdf_path: str):
     story.append(Paragraph("Current Holdings & Research Insights", style_h1))
     
     # Holdings table header
-    holdings_headers = ["Ticker", "Quantity", "Avg Buy Price", "Current Price", "Current Value", "Alloc %", "Rating", "Confidence"]
+    holdings_headers = ["Ticker", "Current Value", "Alloc %", "Research Source", "Rating", "Confidence"]
     holdings_table_rows = [[Paragraph(h, style_table_header) for h in holdings_headers]]
     
     # Map ticker to research rating and confidence
@@ -528,20 +528,35 @@ def generate_pdf_report(json_data: dict, output_pdf_path: str):
         report = reports_map.get(ticker, {})
         rating = report.get("recommendation", "N/A")
         confidence = report.get("confidence_score", 0.0)
-        conf_str = f"{confidence:.1f}%" if confidence else "N/A"
+        conf_str = f"{confidence:.0f}%" if confidence else "N/A"
         
+        # Map source to clean labels: Nirmal Bang, Motilal Oswal, Nirmal Bang + Motilal Oswal, Web Consensus, No Coverage
+        source = report.get("research_source", "No Coverage")
+        rec_type = report.get("recommendation_type", "Web Research")
+        if rating == "Research Not Available" or source == "System Error":
+            display_source = "No Coverage"
+            rating = "No Coverage"
+        elif "Nirmal Bang" in source and "Motilal Oswal" in source:
+            display_source = "Nirmal Bang + Motilal Oswal"
+        elif "Nirmal Bang" in source:
+            display_source = "Nirmal Bang"
+        elif "Motilal Oswal" in source:
+            display_source = "Motilal Oswal"
+        elif "Web Research" in rec_type or "Web" in source:
+            display_source = "Web Consensus"
+        else:
+            display_source = "Web Consensus"
+            
         holdings_table_rows.append([
             Paragraph(ticker, style_table_cell_bold),
-            Paragraph(f"{qty:,.2f}", style_table_cell),
-            Paragraph(format_inr(avg_price), style_table_cell),
-            Paragraph(format_inr(curr_price), style_table_cell),
             Paragraph(format_inr(curr_value), style_table_cell),
             Paragraph(f"{alloc_pct:.1f}%", style_table_cell),
+            Paragraph(display_source, style_table_cell),
             Paragraph(rating, style_table_cell),
             Paragraph(conf_str, style_table_cell)
         ])
         
-    t_holdings = Table(holdings_table_rows, colWidths=[55, 45, 65, 65, 75, 55, 75, 70])
+    t_holdings = Table(holdings_table_rows, colWidths=[65, 85, 65, 140, 75, 74])
     t_holdings.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), primary_color),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
