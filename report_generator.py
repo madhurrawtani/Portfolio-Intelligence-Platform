@@ -281,15 +281,19 @@ def generate_exec_summary(health_data: dict, rebalancing_data: List[dict]) -> st
         action_bullets.append("• Maintain current allocations as they align with the target risk profile.")
     actions_str = "\n".join(action_bullets)
     
+    strengths_html = strengths_bullets.replace('\n', '<br/>')
+    weaknesses_html = weaknesses_bullets.replace('\n', '<br/>')
+    actions_html = actions_str.replace('\n', '<br/>')
+    
     summary_text = (
         f"<b>Overall Portfolio Quality:</b><br/>"
         f"The portfolio is currently evaluated at a Portfolio Health Score of {health_score}/100, indicating {quality_str}<br/><br/>"
         f"<b>Primary Strengths:</b><br/>"
-        f"{strengths_bullets.replace('\n', '<br/>')}<br/><br/>"
+        f"{strengths_html}<br/><br/>"
         f"<b>Primary Weaknesses & Risks:</b><br/>"
-        f"{weaknesses_bullets.replace('\n', '<br/>')}<br/><br/>"
+        f"{weaknesses_html}<br/><br/>"
         f"<b>Most Important Recommended Actions:</b><br/>"
-        f"{actions_str.replace('\n', '<br/>')}"
+        f"{actions_html}"
     )
     return summary_text
 
